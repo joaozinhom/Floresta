@@ -7,7 +7,6 @@ regtest mode.
 """
 
 import os
-import subprocess
 from datetime import datetime, timezone
 from subprocess import Popen
 from typing import List
@@ -111,7 +110,6 @@ class BaseDaemon(metaclass=BaseDaemonMetaClass):
         self._name = None
         self._process = None
         self._settings = []
-        self._verbose = False
 
     # pylint: disable=R0801
     def log(self, message: str):
@@ -179,16 +177,12 @@ class BaseDaemon(metaclass=BaseDaemonMetaClass):
         """Check if the daemon process is running"""
         return self.process is not None and self.process.poll() is None
 
-    def start(self, verbose=False):
+    def start(self):
         """
         Start the daemon process in regtest mode. If any extra-arg is needed,
         append it with add_daemon_settings. Not all possible arguments
         are valid for tests
-
-        Args:
-            verbose: If True, show daemon output. If False, suppress it.
         """
-        self._verbose = verbose
         daemon = os.path.normpath(os.path.join(self.target, self.name))
         if not os.path.exists(daemon):
             raise ValueError(f"Daemon path {daemon} does not exist")
@@ -229,12 +223,8 @@ class BaseDaemon(metaclass=BaseDaemonMetaClass):
         if len(self._settings) >= 1:
             cmd.extend(self._settings)
 
-        # Suppress output unless verbose mode
-        stdout = None if verbose else subprocess.DEVNULL
-        stderr = None if verbose else subprocess.DEVNULL
-
         # pylint: disable=consider-using-with
-        self.process = Popen(cmd, text=True, stdout=stdout, stderr=stderr)
+        self.process = Popen(cmd, text=True)
         self.log(f"Starting node '{self.name}': {' '.join(cmd)}")
 
     def add_daemon_settings(self, settings: List[str]):

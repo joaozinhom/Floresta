@@ -255,6 +255,11 @@ class FlorestaTestFramework(metaclass=FlorestaTestMetaClass):
                 if s.connect_ex(("127.0.0.1", port)) != 0:
                     return port
 
+    @staticmethod
+    def get_random_port():
+        """Get a random port in the range [2000, 65535]"""
+        return FlorestaTestFramework.get_available_random_port(2000, 65535)
+
     def get_test_log_path(self) -> str:
         """Get the path for the test log file.
 
@@ -307,6 +312,10 @@ class FlorestaTestFramework(metaclass=FlorestaTestMetaClass):
         Returns:
             Port number or None if not found
         """
+        return any(arg.startswith(option) for arg in extra_args)
+
+    def extract_port_from_args(self, extra_args: list[str], option: str) -> int:
+        """Extract port number from command-line arguments."""
         for arg in extra_args:
             if arg.startswith(f"{option}="):
                 address = arg.split("=", 1)[1]
@@ -315,14 +324,7 @@ class FlorestaTestFramework(metaclass=FlorestaTestMetaClass):
         return None
 
     def should_enable_electrum_for_utreexod(self, extra_args: list[str]) -> bool:
-        """Determine if electrum should be enabled for utreexod.
-
-        Args:
-            extra_args: List of command-line arguments
-
-        Returns:
-            True if electrum should be enabled, False otherwise
-        """
+        """Determine if electrum should be enabled for utreexod."""
         electrum_disabled_options = [
             "--noelectrum",
             "--disable-electrum",
@@ -406,12 +408,14 @@ class FlorestaTestFramework(metaclass=FlorestaTestMetaClass):
 
         if not self.is_option_set(extra_args, "--rpc-address"):
             ports["rpc"] = 18443 + port_index
+            ports["rpc"] = self.get_random_port()
             default_args.append(f"--rpc-address=127.0.0.1:{ports['rpc']}")
         else:
             ports["rpc"] = self.extract_port_from_args(extra_args, "--rpc-address")
 
         if not self.is_option_set(extra_args, "--electrum-address"):
             ports["electrum-server"] = 20001 + port_index
+            ports["electrum-server"] = self.get_random_port()
             default_args.append(
                 f"--electrum-address=127.0.0.1:{ports['electrum-server']}"
             )
@@ -431,7 +435,7 @@ class FlorestaTestFramework(metaclass=FlorestaTestMetaClass):
             )
 
             if not self.is_option_set(extra_args, "--electrum-address-tls"):
-                ports["electrum-server-tls"] = 21001 + port_index
+                ports["electrum-server-tls"] = self.get_random_port()
                 default_args.append(
                     f"--electrum-address-tls=127.0.0.1:{ports['electrum-server-tls']}"
                 )
@@ -475,13 +479,13 @@ class FlorestaTestFramework(metaclass=FlorestaTestMetaClass):
         )
 
         if not self.is_option_set(extra_args, "--listen"):
-            ports["p2p"] = self.get_available_random_port(18000, 20000)
+            ports["p2p"] = self.get_random_port()
             default_args.append(f"--listen=127.0.0.1:{ports['p2p']}")
         else:
             ports["p2p"] = self.extract_port_from_args(extra_args, "--listen")
 
         if not self.is_option_set(extra_args, "--rpclisten"):
-            ports["rpc"] = self.get_available_random_port(20001, 22000)
+            ports["rpc"] = self.get_random_port()
             default_args.append(f"--rpclisten=127.0.0.1:{ports['rpc']}")
         else:
             ports["rpc"] = self.extract_port_from_args(extra_args, "--rpclisten")
@@ -539,13 +543,13 @@ class FlorestaTestFramework(metaclass=FlorestaTestMetaClass):
         )
 
         if not self.is_option_set(extra_args, "-bind"):
-            ports["p2p"] = 18445 + port_index
+            ports["p2p"] = self.get_random_port()
             default_args.append(f"-bind=127.0.0.1:{ports['p2p']}")
         else:
             ports["p2p"] = self.extract_port_from_args(extra_args, "-bind")
 
         if not self.is_option_set(extra_args, "-rpcbind"):
-            ports["rpc"] = 20443 + port_index
+            ports["rpc"] = self.get_random_port()
             default_args.extend(
                 ["-rpcallowip=127.0.0.1", f"-rpcbind=127.0.0.1:{ports['rpc']}"]
             )
@@ -561,39 +565,31 @@ class FlorestaTestFramework(metaclass=FlorestaTestMetaClass):
         variant: str = "florestad",
         tls: bool = False,
     ) -> Node:
-        """Add a node to the test network.
-
-        Args:
-            extra_args: Extra command-line arguments (default: empty list)
-            variant: Node type ('florestad', 'utreexod', or 'bitcoind')
-            tls: Whether to enable TLS
-
-        Returns:
-            Created Node instance
-
-        Raises:
-            ValueError: If variant is unsupported
+        """
+        Add a node settings to be run. Use this on set_test_params method
+        many times you want. Extra_args should be a list of string in the
+        --key=value strings (see florestad --help for a list of available
+        commands)
         """
         if extra_args is None:
             extra_args = []
-        port_index = len(self._nodes)
         tempdir = str(self.get_integration_test_dir())
         targetdir = os.path.join(tempdir, "binaries")
         testname = self.__class__.__name__.lower()
 
         if variant == "florestad":
             daemon, ports = self.setup_florestad_daemon(
-                targetdir, tempdir, testname, extra_args, tls, port_index
+                targetdir, tempdir, testname, extra_args, tls
             )
             rpcserver = copy.deepcopy(florestad_rpc_server)
         elif variant == "utreexod":
             daemon, ports = self.setup_utreexod_daemon(
-                targetdir, tempdir, testname, extra_args, tls, port_index
+                targetdir, tempdir, testname, extra_args, tls
             )
             rpcserver = copy.deepcopy(utreexod_rpc_server)
         elif variant == "bitcoind":
             daemon, ports = self.setup_bitcoind_daemon(
-                targetdir, tempdir, testname, extra_args, port_index
+                targetdir, tempdir, testname, extra_args
             )
             rpcserver = copy.deepcopy(bitcoind_rpc_server)
         else:
